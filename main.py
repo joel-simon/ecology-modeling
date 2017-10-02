@@ -207,15 +207,23 @@ if __name__ == '__main__':
 	view = PygameDraw(w*5, h*5, scale=5)
 	
 	draw_sim(view, sim)
-	
+
 	for i in range(timesteps):
 		sim.step()
 		draw_sim(view, sim)
 		print(i)
 		view.save('./imgs/%03d.jpg'%i)
 
+	# Print each existing genome once. 
 	genomes = set(ind.genome.id for ind in sim.individuals.values())
-	for genome in genomes:
-		print(genome)
-	print('done')
+	for ind in sim.individuals.values():
+		if ind.genome.id in genomes:
+			print('fight', ind.genome.fight)
+			print('grow', ind.genome.fight)
+			print('spread', ind.genome.fight)
+			print('seed_size', ind.genome.seed_size)
+			print('attributes', ind.genome.attributes)
+			print()
+			genomes.remove(ind.genome.id)
+
 	view.hold()
