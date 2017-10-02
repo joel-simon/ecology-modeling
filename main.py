@@ -4,6 +4,7 @@ from math import pi, sqrt
 from rtree import index
 import numpy as np
 from draw import PygameDraw
+import os, shutil
 
 Genome = namedtuple('Genome', ['id', 'fight', 'grow', 'spread', 'seed_size', 'attributes', 'color'])
 
@@ -84,7 +85,7 @@ def individuals_overlap(a, b):
 
 class Simulation(object):
 	def __init__(self, width, height, n_start, n_attributes, bias_power,
-				 seed_size_range, n_randseed, p_death):#, p_disturb, a_disturb):
+				 seed_size_range, n_randseed, p_death, p_disturbance):#, p_disturb, a_disturb):
 		self.width = width
 		self.height = height
 		self.n_start = n_start
@@ -93,6 +94,7 @@ class Simulation(object):
 		self.seed_size_range = seed_size_range
 		self.n_randseed = n_randseed
 		self.p_death = p_death
+		self.p_disturbance = p_disturbance
 		
 		
 		self.next_ind_id = 0
@@ -128,8 +130,11 @@ class Simulation(object):
 		return ind
 
 	def disturb(self):
-		pass
-		# for ind in query()
+		left, right = sorted([random()*self.width, random()*self.width])
+		bottom, top = sorted([random()*self.height, random()*self.height])
+		
+		for id in self.tree.intersection((left, bottom, right, top )):
+			del self.individuals[id]
 
 	def death(self, ind):
 		if random() < self.p_death:
@@ -171,6 +176,10 @@ class Simulation(object):
 			coords = (ind.x-ind.radius, ind.y-ind.radius,
 					  ind.x+ind.radius, ind.y+ind.radius)
 			self.tree.insert(ind.id, coords)
+
+		if random() < self.p_disturbance:
+			print('Disturbed.')
+			self.disturb()
 		
 		for id in list(self.individuals.keys()):
 			if self.death(self.individuals[id]):
@@ -197,15 +206,29 @@ def draw_sim(view, sim):
 	view.draw_text((10, 30), 'n_species: %i' % n_genomes)
 	view.end_draw()
 
+def prepare_dir(dir):
+	if os.path.exists(dir):
+		shutil.rmtree(dir)
+	   #  for the_file in os.listdir(dir):
+		  #   file_path = os.path.join(dir, the_file)
+		  #   try:
+		  #       if os.path.isfile(file_path):
+		  #           os.unlink(file_path)
+	# else:
+	os.makedirs(dir)
+	
 if __name__ == '__main__':
 	w, h = 100, 100
-	timesteps = 500
+	timesteps = 300
 
 	sim = Simulation(width=w, height=h, n_start=100, n_attributes=5,p_death=.03,
-				     bias_power=.5, seed_size_range=(.2, 4), n_randseed=3)
+				     bias_power=.5, seed_size_range=(1, 4), n_randseed=3,
+				     p_disturbance=0.5)
 
 	view = PygameDraw(w*5, h*5, scale=5)
 	
+	prepare_dir('./imgs')
+
 	draw_sim(view, sim)
 
 	for i in range(timesteps):
@@ -219,8 +242,8 @@ if __name__ == '__main__':
 	for ind in sim.individuals.values():
 		if ind.genome.id in genomes:
 			print('fight', ind.genome.fight)
-			print('grow', ind.genome.fight)
-			print('spread', ind.genome.fight)
+			print('grow', ind.genome.grow)
+			print('spread', ind.genome.spread)
 			print('seed_size', ind.genome.seed_size)
 			print('attributes', ind.genome.attributes)
 			print()
