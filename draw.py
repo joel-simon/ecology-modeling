@@ -68,8 +68,9 @@ class PygameDraw(object):
         if width == 0:
             x, y = position
             pygame.gfxdraw.filled_circle(self.surface, x, y, r, color)
-        else:
-            pygame.draw.circle(self.surface, color, position, r, width)
+        # else:
+        pygame.gfxdraw.aacircle(self.surface, x, y, r, color)
+            # pygame.draw.circle(self.surface, color, position, r, width)
 
     def draw_line(self, positionA, positionB, color, width=1):
         a = self.map_point(positionA)
@@ -128,8 +129,8 @@ class PygameDraw(object):
 
     def draw_text(self, position, string, font=8, color=BLACK, center=False):
         # font = int(self.scale * font)
-        x, y = position# self.map_point(position)
-        # print(x, y)
+        # x, y = self.map_point(position)
+        x, y = position
 
         # if font not in self.fonts:
         #     self.fonts[font] = pygame.font.SysFont("monospace", font)
