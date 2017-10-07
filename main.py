@@ -19,8 +19,39 @@ class Individual(object):
 		self.y = y
 		self.start_radius = radius
 		self.radius = radius
+		self.next_radius = radius
 		self.energy = energy
+	
+	def area(self):
+		return pi * self.radius**2
+
+	def distanceTo(self, other):
+		return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+	
+	def combat(self, other, biases):
+		""" Return who outcompetes whom. 
+		"""
+		a1, a2 = self.genome.attributes, other.genome.attributes
+		n = len(a1)
 		
+		l1 = sum( n*a - np.dot(a2, biases[i]) for i, a in enumerate(a1) )
+		l2 = sum( n*a - np.dot(a1, biases[i]) for i, a in enumerate(a2) )
+
+		w1 = l1*self.area()
+		w2 = l2*other.area()
+
+		s = w1+w2
+
+		if w1 == w2: # handle s==0 case too.
+			return self if random() < .5 else other
+
+		w1 /= s
+		w2 /= s
+		
+		if random() < w1:
+			return self
+		else:
+			return other
 ################################################################################
 """ Utils
 """
@@ -54,44 +85,6 @@ def create_biases(n_attributes, power):
 
 def area_to_radius(area):
 	return sqrt(area/pi)
-################################################################################
-""" Individuals
-"""
-def individual_area(s):
-	return pi * s.radius**2
-
-# def dot(l1, l2):
-# 	return sum(a+b for a, b in zip(l1, l2))
-
-def individuals_combat_winner(ind1, ind2, biases):
-	a1, a2 = ind1.genome.attributes, ind2.genome.attributes
-	n = len(a1)
-	
-	l1 = sum( n*a - np.dot(a2, biases[i]) for i, a in enumerate(a1) )
-	l2 = sum( n*a - np.dot(a1, biases[i]) for i, a in enumerate(a2) )
-
-	w1 = l1*individual_area(ind1)
-	w2 = l2*individual_area(ind2)
-
-	s = w1+w2
-
-	if w1 == w2: # handle s==0 case too.
-		return ind1 if random() < .5 else ind2
-
-	w1 /= s
-	w2 /= s
-	
-	if random() < w1:
-		return ind1
-	else:
-		return ind2
-
-def individuals_overlap(a, b):
-	d = sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
-	return d <= (a.radius + b.radius)
-
-def individuals_distance(a, b):
-	return sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
 ################################################################################
 
@@ -116,7 +109,7 @@ class Simulation(object):
 		self.individuals = dict()
 		self.biases = create_biases(self.n_attributes, self.bias_power)
 		########################################################################
-		self.tree = aabb.Tree(2, .1, 500)
+		self.tree = aabb.Tree(2)
 
 		for _ in range(n_start):
 			g = self.randomGenome()
@@ -188,19 +181,19 @@ class Simulation(object):
 		for id in self.tree.query(aabb.AABB(lower, upper)):
 			self.destroyIndividual(id)
 
-	def step(self):
-		print('step start')
-		seeds = [(1, self.randomGenome()) for _ in range(self.n_randseed)]
+	def stepUpdateIndividuals(self, seeds):
+		
 		lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
 
 		########################################################################
 		# Update the individuals attributes, spatial map and create seeds. 
 		########################################################################
 		for id, ind in self.individuals.items():
-			energy = individual_area(ind)
+			area = ind.area()
+			energy = area
 			
 			# Area grows proportional to energy spent on it.
-			new_area = individual_area(ind) + ind.genome.grow
+			new_area = area + ind.genome.grow
 			ind.radius = area_to_radius(new_area)
 
 			# Number of seeds.
@@ -213,8 +206,13 @@ class Simulation(object):
 			position = aabb.DoubleVector(2)
 			position[0] = ind.x
 			position[1] = ind.y
-			self.tree.updateParticle(id, position, ind.radius)
+			# self.tree.updateParticle(id, position, ind.radius)
+			self.tree.removeParticle(id)
+			self.tree.insertParticle(id, position, ind.radius)
 
+		return seeds
+
+	def stepSpreadSeeds(self, seeds):
 		########################################################################
 		# Spread seeds.
 		########################################################################
@@ -226,7 +224,14 @@ class Simulation(object):
 			for _ in range(n):
 				x, y = random() * self.width, random() * self.height
 				self.createIndividual(genome, x, y, genome.seed_size)
+
+	def step(self):
+		lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
+		seeds = [(1, self.randomGenome()) for _ in range(self.n_randseed)]
 		
+		self.stepUpdateIndividuals(seeds)
+		self.stepSpreadSeeds(seeds)
+
 		########################################################################
 		# Killing time.
 		########################################################################
@@ -234,62 +239,62 @@ class Simulation(object):
 			print('Disturbance.')
 			self.disturbRectangle()
 
+		for ind in self.individuals.values():
+			ind.next_radius = ind.radius
+
 		# Create copy of list so we can edit while we iterate
 		for id, ind in list(self.individuals.items()):
+			
 			if id not in self.individuals:
 				continue
-
+			
 			if random() < self.p_death: # Chance of random death.
 				self.destroyIndividual(id)
 				continue
 
-			lower[0] = ind.x - ind.radius
-			lower[1] = ind.y - ind.radius
-			upper[0] = ind.x + ind.radius
-			upper[1] = ind.y + ind.radius
-			
-			# print('coll:'+str(id), list(self.tree.query(aabb.AABB(lower, upper))))
-
-			for id_other in self.tree.query(aabb.AABB(lower, upper)):
+			for id_other in self.tree.query(id):
 				if id_other == id:
 					continue
 
 				ind_other = self.individuals[id_other]
-	
-				dist = individuals_distance(ind, ind_other)
+				dist = ind.distanceTo(ind_other)
 				
 				# If overlapping.
-				if dist > ind.radius + ind_other.radius:
+				if dist > (ind.radius + ind_other.radius):
 					continue
 				
-				# print('colliding', id, id_other)
-
-				winner = individuals_combat_winner(ind, ind_other, self.biases)
+				winner = ind.combat(ind_other, self.biases)
 				loser = ind if winner is ind_other else ind_other
 
 				# If the winner covers the center of loser, then loser dies.
-				# self.destroyIndividual(loser.id)
 				if dist < winner.radius:
 					self.destroyIndividual(loser.id)
 				else:
 					# The loser shrinks.
-					loser.radius = (dist - winner.radius) * .95
-					if loser.radius <= loser.start_radius:
+					loser.next_radius = min(loser.next_radius, (dist - winner.radius) * .95)
+					
+					assert loser.next_radius < loser.radius, (loser.next_radius,loser.radius)
+
+					if loser.next_radius <= loser.start_radius:
 						self.destroyIndividual(loser.id)	
 
 				# Stop checking others if this individual died
 				if loser is ind:
-				
 					break
 
 		for id, ind in self.individuals.items():
+			ind.radius = ind.next_radius
 			position = aabb.DoubleVector(2)
 			position[0] = ind.x
 			position[1] = ind.y
-			self.tree.updateParticle(id, position, ind.radius)
+			
+			# self.tree.updateParticle(id, position, ind.radius)
+			self.tree.removeParticle(id)
+			self.tree.insertParticle(id, position, ind.radius)
 
+		genomes = set(ind.genome.id for ind in sim.individuals.values())
 		print('n_individuals', len(self.individuals))
-		print('step end\n')
+		print('n_genomes', len(genomes))
 		# assert(self.isValid())
 
 	def isValid(self):
@@ -297,7 +302,9 @@ class Simulation(object):
 			for id2, ind2 in self.individuals.items():
 				if id1 == id2:
 					continue
-				if individuals_distance(ind1, ind2) < ind1.radius + ind2.radius:
+				d = ind1.distanceTo(ind2)
+				if d < ind1.radius + ind2.radius:
+					print(d, ind1.radius+ind2.radius,(ind1.x, ind1.y, ind1.radius), (ind2.x, ind2.y, ind2.radius))
 					print(id1, id2)
 					return False
 		return True
@@ -327,13 +334,17 @@ def count_species(sim):
 
 if __name__ == '__main__':
 	w, h = 100, 100
-	timesteps = 5000
+	timesteps = 3000
 	show = True
+	save = True
+
 	start = time.time()
 	
-	sim = Simulation(width=w, height=h, n_start=300, n_attributes=5, p_death=.01,
-				     bias_power=.5, seed_size_range=(5., 10.), n_randseed=5,
-				     p_disturbance=0.05)
+	sim = Simulation(width=w, height=h, n_start=300, n_attributes=5, p_death=.005,
+				     bias_power=.5, seed_size_range=(2, 10.), n_randseed=0,
+				     p_disturbance=0.00)
+	
+	assert(sim.isValid())
 
 	history = []
 
@@ -351,7 +362,8 @@ if __name__ == '__main__':
 
 		if show:
 			draw_sim(view, sim)
-			view.save('./imgs/%03d.jpg'%i)
+			if save:
+				view.save('./imgs/%03d.jpg'%i)
 
 
 	# # Print each existing genome once. 
