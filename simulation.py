@@ -58,13 +58,20 @@ class Simulation(object):
 	def isEmptySpace(self, x, y, r):
 		if self.tree.getNodeCount() == 0:
 			return True
+		
 		lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
 		lower[0] = x - r
 		lower[1] = y - r
 		upper[0] = x + r
 		upper[1] = y + r
-		AABB = aabb.AABB(lower, upper)
-		return len(self.tree.query(AABB)) == 0
+		
+		for id in self.tree.query(aabb.AABB(lower, upper)):
+			ind = self.individuals[id]
+			d = sqrt((x - ind.x)**2 + (y - ind.y)**2)
+			if d - ind.radius < r:
+				return False
+		
+		return True
 
 	def createIndividual(self, g, x, y, seed_size):
 		""" Returns the individuals id.
@@ -135,7 +142,7 @@ class Simulation(object):
 		position[0] = ind.x
 		position[1] = ind.y
 
-		# self.tree.updateParticle(id, position, ind.radius)
+		# self.tree.updateParticle(ind.id, position, ind.radius)
 		self.tree.removeParticle(ind.id)
 		self.tree.insertParticle(ind.id, position, ind.radius)
 

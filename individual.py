@@ -19,6 +19,9 @@ class Individual(object):
 
 	def distanceTo(self, other):
 		return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+
+	# def overlaps(self, other):
+	# 	return self.distanceTo(other) < self.radius + other.radius
 	
 	def winPropability(self, other, biases):
 		a1, a2 = self.genome.attributes, other.genome.attributes

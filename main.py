@@ -1,6 +1,7 @@
 from __future__ import print_function, division
 import time
 import os, shutil
+from os.path import join as pjoin
 # from random import random, uniform, shuffle
 from collections import Counter
 import pickle
@@ -35,25 +36,40 @@ def count_species(sim):
 ################################################################################
 
 if __name__ == '__main__':
-	w, h = 150, 150
 	timesteps = 5000
 	show = True
 	save = True
-
 	start = time.time()
-	
-	sim = Simulation(width=w, height=h, n_start=300, n_attributes=5, p_death=.005,
-				     bias_power=.5, seed_size_range=(1, 5.), n_randseed=3,
-				     p_disturbance=0.0, disturbance_power=.15,
-				     seed_cost_multiplier=1)
-	
 	history = []
+
+	name = 'no_disturbance'
+	assert len(name) != 0
+	out_dir = '/Users/joelsimon/Dropbox/projects/ecology_modelling/output/'+name+'/'
+	assert not os.path.exists(out_dir)
+
+	config = {
+		'width':150,
+		'height':150,
+		'n_start':300,
+		'n_attributes':5,
+		'p_death':.005,
+		'bias_power':.5,
+		'seed_size_range':(1, 5.),
+		'n_randseed':3,
+		'p_disturbance':0.0,
+		'disturbance_power':.15,
+		'seed_cost_multiplier':1,
+	}
+	
+	sim = Simulation(**config)
 
 	if show:
 		from draw import PygameDraw
-		view = PygameDraw(w*5, h*5, scale=5)
-		prepare_dir('./imgs')
+		view = PygameDraw(config['width']*5, config['height']*5, scale=5)
+		prepare_dir(pjoin(out_dir, 'imgs'))
 		draw_sim(view, sim)
+	else:
+		prepare_dir(out_dir)
 
 	for i in range(timesteps):
 		
@@ -64,14 +80,14 @@ if __name__ == '__main__':
 		if i % 100  == 0:
 			print('Step:', i)
 			genomes = set(ind.genome.id for ind in sim.individuals.values())
-			print('n_individuals', len(sim.individuals))
-			print('n_genomes', len(genomes))
+			print('n_individuals:', len(sim.individuals))
+			print('n_genomes:', len(genomes))
 			print()
 
 		if show:
 			draw_sim(view, sim)
 			if save:
-				view.save('./imgs/%03d.jpg'%i)
+				view.save(pjoin(out_dir, 'imgs/%03d.jpg'%i))
 
 
 	# # Print each existing genome once. 
@@ -87,7 +103,11 @@ if __name__ == '__main__':
 	# 		genomes.remove(ind.genome.id)
 	
 	print('Done in:', time.time() - start)
-	pickle.dump(history, open('history.p', 'wb+'))
+	pickle.dump(history, open(pjoin(out_dir, 'history.p'), 'wb+'))
+	
+	with open(pjoin(out_dir, 'config.txt'), 'wb+') as fconfig:
+		for key, value in config.items():
+			fconfig.write(key+'\t'+str(value)+'\n')
 
-	if show:
-		view.hold()
+	# if show:
+	# 	view.hold()
