@@ -15,6 +15,7 @@ class Simulation(object):
 				 seed_size_range, n_randseed, p_death, p_disturbance,
 				 disturbance_power, seed_cost_multiplier):
 		########################################################################
+		# Configuration.
 		self.width = width
 		self.height = height
 		self.n_start = n_start
@@ -27,15 +28,32 @@ class Simulation(object):
 		self.disturbance_power = disturbance_power
 		self.total_attributes = 10
 		self.seed_cost_multiplier = seed_cost_multiplier
+		self.max_radius = min(width, height) / 2.0
+		
 		########################################################################
 		self.next_ind_id = 0
 		self.next_gen_id = 0
-		########################################################################		
+		
+		########################################################################	
+		# Core objects.	
 		self.individuals = dict()
+		self.genomes = dict()
 		self.biases = create_biases(self.n_attributes, self.bias_power)
-		########################################################################
-		self.tree = aabb.Tree(2)
 
+		########################################################################
+		# Create periodic AABB tree used for object collisions.
+		self.tree = aabb.Tree(2)
+		periodicity = aabb.BoolVector(2)
+		periodicity[0] = True
+		periodicity[1] = True
+		self.tree.setPeriodicity(periodicity)
+		box_size = aabb.DoubleVector(2)
+		box_size[0] = self.width
+		box_size[1] = self.height
+		self.tree.setBoxSize(box_size)
+		
+		########################################################################
+		# Create intitial population.
 		for _ in range(n_start):
 			g = self.randomGenome()
 			x = random() * width
@@ -52,6 +70,7 @@ class Simulation(object):
 		
 		genome = Genome(self.next_gen_id, fight/s, grow/s, seed/s, seed_size,
 			 												  attributes, color)
+		self.genomes[genome.id] = genome
 		self.next_gen_id += 1
 		return genome
 
@@ -73,7 +92,7 @@ class Simulation(object):
 		
 		return True
 
-	def createIndividual(self, g, x, y, seed_size):
+	def createIndividual(self, genome, x, y, seed_size):
 		""" Returns the individuals id.
 		"""
 		radius = area_to_radius(seed_size)
@@ -82,7 +101,7 @@ class Simulation(object):
 			return None
 
 		energy = pi * radius * radius
-		ind = Individual(self.next_ind_id, g, x, y, radius, energy)
+		ind = Individual(self.next_ind_id, genome, x, y, radius, energy)
 		
 		self.next_ind_id += 1
 		self.individuals[ind.id] = ind
@@ -126,6 +145,7 @@ class Simulation(object):
 			# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
 			new_growth = grow_energy**.75
 			ind.radius = area_to_radius(ind_area + new_growth)
+			ind.radius = min(self.max_radius, ind.radius)
 
 			# Number of seeds.
 			seed_cost = ind.genome.seed_size * self.seed_cost_multiplier
@@ -170,7 +190,6 @@ class Simulation(object):
 		# Killing time.
 		########################################################################
 		if random() < self.p_disturbance:
-			print('Disturbance.')
 			self.disturbRectangle()
 
 		for ind in self.individuals.values():
