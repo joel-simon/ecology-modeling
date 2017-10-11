@@ -32,8 +32,8 @@ def prepare_dir(dir):
 
 if __name__ == '__main__':
 	timesteps = 10000
-	show = True
-	save = True
+	show = False
+	save = False
 	start = time.time()
 	history = []
 
@@ -52,37 +52,37 @@ if __name__ == '__main__':
 	# 	'seed_cost_multiplier':1,
 	# }
 	
-	# name = 'test'
-	# timesteps = 100
-	# config = {
-	# 	'width':200,
-	# 	'height':200,
-	# 	'n_start':300,
-	# 	'n_attributes':5,
-	# 	'p_death':.000,
-	# 	'bias_power':.5,
-	# 	'seed_size_range':(1, 5.),
-	# 	'n_randseed':6,
-	# 	'p_disturbance':0.0,
-	# 	'disturbance_power':.25,
-	# 	'seed_cost_multiplier':1,
-	# }
-
-
-	name = 'no_disturbance_large'
+	name = 'test'
+	timesteps = 100
 	config = {
 		'width':200,
 		'height':200,
 		'n_start':300,
 		'n_attributes':5,
-		'p_death':.0078125,
+		'p_death':.000,
 		'bias_power':.5,
 		'seed_size_range':(1, 5.),
 		'n_randseed':6,
 		'p_disturbance':0.0,
-		'disturbance_power':0.0,
+		'disturbance_power':.25,
 		'seed_cost_multiplier':1,
 	}
+
+
+	# name = 'no_disturbance_large'
+	# config = {
+	# 	'width':200,
+	# 	'height':200,
+	# 	'n_start':300,
+	# 	'n_attributes':5,
+	# 	'p_death':.0078125,
+	# 	'bias_power':.5,
+	# 	'seed_size_range':(1, 5.),
+	# 	'n_randseed':6,
+	# 	'p_disturbance':0.0,
+	# 	'disturbance_power':0.0,
+	# 	'seed_cost_multiplier':1,
+	# }
 
 	assert len(name) != 0
 	

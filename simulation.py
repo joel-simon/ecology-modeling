@@ -128,35 +128,33 @@ class Simulation(object):
 		for id in self.tree.query(aabb.AABB(lower, upper)):
 			self.destroyIndividual(id)
 
-	def stepUpdateIndividuals(self, seeds):
+	def stepUpdateIndividual(self, individual, seeds):
 		""" Update the individuals attributes, spatial map and create seeds. 
 			We change the seed list in place.
 			'seeds' is a list of tuples [(n_seeds, genome), ...]
 		"""
-		lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
-		for id, ind in self.individuals.items():
-			ind_area = ind.area()
-			
-			# energy is based on it and 3.4 powe rule.
-			# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
-			new_energy = ind_area**.75
-			
-			grow_energy = new_energy * ind.genome.grow
-			seed_energy = new_energy * ind.genome.seed
-			
-			new_growth = sqrt(grow_energy)
-			ind.radius = area_to_radius(ind_area + new_growth)
-			ind.radius = min(self.max_radius, ind.radius)
+		
+		ind_area = individual.area()
+		
+		# energy is based on it and 3.4 power rule.
+		# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
+		new_energy = ind_area**.75
+		
+		grow_energy = new_energy * individual.genome.grow
+		seed_energy = new_energy * individual.genome.seed
+		
+		new_growth = sqrt(grow_energy)
+		individual.radius = area_to_radius(ind_area + new_growth)
+		individual.radius = min(self.max_radius, individual.radius)
 
-			# Number of seeds.
-			seed_cost = ind.genome.seed_size * self.seed_cost_multiplier
-			num_seeds = int(ind.energy // seed_cost)
-			seeds.append((num_seeds, ind.genome))
-			
-			# Update spatial map
-			self.updateIndividualSpatialTree(ind)
-
-		return seeds
+		# Number of seeds.
+		seed_cost = individual.genome.seed_size * self.seed_cost_multiplier
+		num_seeds = int(individual.energy // seed_cost)
+		seeds.append((num_seeds, individual.genome))
+		
+		# # Update spatial map
+		# self.updateIndividualSpatialTree(ind)
+		# return seeds
 
 	def updateIndividualSpatialTree(self, ind):
 		position = aabb.DoubleVector(2)
@@ -164,8 +162,6 @@ class Simulation(object):
 		position[1] = ind.y
 
 		self.tree.updateParticle(ind.id, position, ind.radius)
-		# self.tree.removeParticle(ind.id)
-		# self.tree.insertParticle(ind.id, position, ind.radius)
 
 	def stepSpreadSeeds(self, seeds):
 		""" Spread seeds.
@@ -183,62 +179,70 @@ class Simulation(object):
 		lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
 		seeds = [(1, self.randomGenome()) for _ in range(self.n_randseed)]
 		
-		self.stepUpdateIndividuals(seeds)
-		self.stepSpreadSeeds(seeds)
+		for individual in self.individuals.values():
+			individual.blocked = False
 
-		########################################################################
-		# Killing time.
-		########################################################################
-		if random() < self.p_disturbance:
-			self.disturbRectangle()
-
-		for ind in self.individuals.values():
-			ind.next_radius = ind.radius
-
-		# Create copy of list so we can edit while we iterate
-		for id, ind in list(self.individuals.items()):
+		# Create copy of list so we can edit while we iterate randomly.
+		id_list = list(self.individuals.keys())
+		shuffle(id_list)
+	
+		for id in id_list:
+ 			individual = self.individuals.get(id, None)
 			
-			if id not in self.individuals:
+			# Died from combat this turn.
+			if individual is None: 
+				continue
+
+			# We already lost a fight this turn, cannot grow.
+			if individual.blocked: 
 				continue
 			
-			if random() < self.p_death: # Chance of random death.
+			# Chance of random death.
+			if random() < self.p_death: 
 				self.destroyIndividual(id)
 				continue
 
-			for id_other in self.tree.query(id):
+			# Update individual list of seeds in place.
+			self.stepUpdateIndividual(individual, seeds)
+			
+			# Query by individuals new size.
+			lower[0] = individual.x - individual.radius
+			lower[1] = individual.y - individual.radius
+			upper[0] = individual.x + individual.radius
+			upper[1] = individual.y + individual.radius
+			
+			for id_other in self.tree.query(aabb.AABB(lower, upper)):
 				if id_other == id:
 					continue
 
 				ind_other = self.individuals[id_other]
-				dist = ind.distanceTo(ind_other)
+				dist = individual.distanceTo(ind_other)
 				
 				# If overlapping.
-				if dist > (ind.radius + ind_other.radius):
+				if dist > (individual.radius + ind_other.radius):
 					continue
 				
-				winner = self.combat(ind, ind_other)
-				loser = ind if winner is ind_other else ind_other
+				winner, loser = self.combat(individual, ind_other)
 
-				# If the winner covers the center of loser, then loser dies.
-				if dist < winner.radius:
-					self.destroyIndividual(loser.id)
-				else:
-					# The loser shrinks.
-					loser.next_radius = min(loser.next_radius, (dist - winner.radius) * .95)
-					
-					assert loser.next_radius < loser.radius, (loser.next_radius,loser.radius)
+				# The loser shrinks.
+				loser.blocked = True
+				loser.radius = (dist - winner.radius) * .95
+				if loser.radius <= loser.start_radius:
+					self.destroyIndividual(loser.id)	
 
-					if loser.next_radius <= loser.start_radius:
-						self.destroyIndividual(loser.id)	
-
-				# Stop checking others if this individual died
-				if loser is ind:
+				# Stop checking others if this individual lost.
+				if loser is individual:
 					break
 
-		for id, ind in self.individuals.items():
-			ind.radius = ind.next_radius
-			self.updateIndividualSpatialTree(ind)
+		# Udate tree with new positions.
+		for id, individual in self.individuals.items():
+			self.updateIndividualSpatialTree(individual)
 
+		self.stepSpreadSeeds(seeds)	
+
+		if random() < self.p_disturbance:
+			self.disturbRectangle()
+		
 		# assert(self.isValid())
 	
 	def genomeWinProbabiliy(self, genome1, genome2):
@@ -272,7 +276,8 @@ class Simulation(object):
 			p = .5
 		else:
 			p = w1 / (w1 + w2)
-		return ind1 if random() < p else ind2
+		
+		return (ind1, ind2) if random() < p else (ind2, ind1)
 
 	def isValid(self):
 		for id1, ind1 in self.individuals.items():
