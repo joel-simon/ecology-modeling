@@ -4,7 +4,7 @@ from random import random, randint, uniform, shuffle
 from collections import namedtuple
 
 import aabb
-
+import numpy as np
 from individual import Individual
 from utils import randomly_distribute, create_biases, area_to_radius
 
@@ -39,10 +39,10 @@ class Simulation(object):
 		self.individuals = dict()
 		self.genomes = dict()
 		self.biases = create_biases(self.n_attributes, self.bias_power)
-
+		self.combat_hash = dict()
 		########################################################################
 		# Create periodic AABB tree used for object collisions.
-		self.tree = aabb.Tree(2)
+		self.tree = aabb.Tree(2, .4, 128)
 		periodicity = aabb.BoolVector(2)
 		periodicity[0] = True
 		periodicity[1] = True
@@ -136,14 +136,15 @@ class Simulation(object):
 		lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
 		for id, ind in self.individuals.items():
 			ind_area = ind.area()
-			new_energy = ind_area
+			
+			# energy is based on it and 3.4 powe rule.
+			# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
+			new_energy = ind_area**.75
 			
 			grow_energy = new_energy * ind.genome.grow
 			seed_energy = new_energy * ind.genome.seed
-
-			# growth is based on energy spent on it and 3.4 powe rule.
-			# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
-			new_growth = grow_energy**.75
+			
+			new_growth = sqrt(grow_energy)
 			ind.radius = area_to_radius(ind_area + new_growth)
 			ind.radius = min(self.max_radius, ind.radius)
 
@@ -162,14 +163,13 @@ class Simulation(object):
 		position[0] = ind.x
 		position[1] = ind.y
 
-		# self.tree.updateParticle(ind.id, position, ind.radius)
-		self.tree.removeParticle(ind.id)
-		self.tree.insertParticle(ind.id, position, ind.radius)
+		self.tree.updateParticle(ind.id, position, ind.radius)
+		# self.tree.removeParticle(ind.id)
+		# self.tree.insertParticle(ind.id, position, ind.radius)
 
 	def stepSpreadSeeds(self, seeds):
-		########################################################################
-		# Spread seeds.
-		########################################################################
+		""" Spread seeds.
+		"""
 		# print('nseeds: ', sum(s[0] for s in seeds))
 		
 		# Iterate through seeds in random order.
@@ -216,7 +216,7 @@ class Simulation(object):
 				if dist > (ind.radius + ind_other.radius):
 					continue
 				
-				winner = ind.combat(ind_other, self.biases)
+				winner = self.combat(ind, ind_other)
 				loser = ind if winner is ind_other else ind_other
 
 				# If the winner covers the center of loser, then loser dies.
@@ -240,6 +240,39 @@ class Simulation(object):
 			self.updateIndividualSpatialTree(ind)
 
 		# assert(self.isValid())
+	
+	def genomeWinProbabiliy(self, genome1, genome2):
+
+		if genome1.id < genome2.id:
+			key = (genome1.id, genome2.id)
+		else:
+			key = (genome2.id, genome1.id)
+
+		if key in self.combat_hash:
+			return self.combat_hash[key]
+
+		a1, a2 = genome1.attributes, genome2.attributes
+		
+		n = len(a1)		
+		l1 = sum( n*a - np.dot(a2, self.biases[i]) for i, a in enumerate(a1) )
+		l2 = sum( n*a - np.dot(a1, self.biases[i]) for i, a in enumerate(a2) )
+
+		self.combat_hash[key] = (l1, l2)
+
+		return l1, l2
+
+
+	def combat(self, ind1, ind2):
+		""" Return who outcompetes whom. 
+		"""
+		w1, w2 = self.genomeWinProbabiliy(ind1.genome, ind2.genome)
+		w1 *= ind1.area()
+		w2 *= ind2.area()
+		if w1 == w2: # handle 0 case too.
+			p = .5
+		else:
+			p = w1 / (w1 + w2)
+		return ind1 if random() < p else ind2
 
 	def isValid(self):
 		for id1, ind1 in self.individuals.items():

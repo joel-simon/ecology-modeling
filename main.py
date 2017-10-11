@@ -31,13 +31,13 @@ def prepare_dir(dir):
 ################################################################################
 
 if __name__ == '__main__':
-	timesteps = 25000
+	timesteps = 10000
 	show = True
 	save = True
 	start = time.time()
 	history = []
 
-	# name = 'with_disturbance_long'
+	# name = 'with_disturbance_long_2'
 	# config = {
 	# 	'width':128,
 	# 	'height':128,
@@ -51,11 +51,28 @@ if __name__ == '__main__':
 	# 	'disturbance_power':.25,
 	# 	'seed_cost_multiplier':1,
 	# }
+	
+	# name = 'test'
+	# timesteps = 100
+	# config = {
+	# 	'width':200,
+	# 	'height':200,
+	# 	'n_start':300,
+	# 	'n_attributes':5,
+	# 	'p_death':.000,
+	# 	'bias_power':.5,
+	# 	'seed_size_range':(1, 5.),
+	# 	'n_randseed':6,
+	# 	'p_disturbance':0.0,
+	# 	'disturbance_power':.25,
+	# 	'seed_cost_multiplier':1,
+	# }
 
-	name = 'no_disturbance_long'
+
+	name = 'no_disturbance_large'
 	config = {
-		'width':128,
-		'height':128,
+		'width':200,
+		'height':200,
 		'n_start':300,
 		'n_attributes':5,
 		'p_death':.0078125,
