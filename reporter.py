@@ -4,32 +4,41 @@ import numpy as np
 from os.path import join as pjoin
 
 class Reporter(object):
-	"""docstring for Reporter"""
 	def __init__(self):
-		self.history = []
-		self.genomes = dict()
-		self.max_individuals = 0 # most per generation, needed for exporting as array.
-	
+		self._genomes = dict()
+		self._stepBreaks = []
+		self._history_ints = []
+		self._history_floats = []
+
 	def addGeneration(self, sim):
-		individuals = []
-		self.max_individuals = max(len(sim.individuals), self.max_individuals)
-
 		for ind in sim.individuals.values():
-			individuals.append((ind.id, ind.genome.id, ind.x, ind.y, ind.area()))
-			self.genomes[ind.genome.id] = ind.genome
-
-		self.history.append(individuals)
-
-	def save(self, directory):
-		print('Saving the history to:', directory)
+			self._history_ints.append((ind.id, ind.genome.id))
+			self._history_floats.append((ind.x, ind.y, ind.area()))
+			self._genomes[ind.genome.id] = ind.genome
 		
-		history_arr = np.zeros((len(self.history), self.max_individuals, 5), dtype='uint32')
+		self._stepBreaks.append(len(self._history_ints))
 
-		for i, generation in enumerate(self.history):
-			for j, individual in enumerate(generation):
-				history_arr[i, j] = individual
+	def save(self, filepath, config):
+		print('Saving the history to:', filepath)
+		
+		step_breaks = np.array(self._stepBreaks, dtype='uint32')
+		history_ints = np.array(self._history_ints, dtype='uint32')
+		history_flaots = np.array(self._history_floats, dtype='float16')
 
-		np.save(pjoin(directory, 'history.npy'), history_arr)
+		n_ints = 5 + config['n_attributes']
+		genome_ints = np.empty((len(self._genomes), n_ints), dtype='uint32')
+		genome_floats = np.empty((len(self._genomes), 4), dtype='float32')
 
-		g_out = open(pjoin(directory, 'genomes.p'), 'wb')
-		pickle.dump(list(self.genomes.values()), g_out)
+		for i, genome in enumerate(self._genomes.values()):
+			genome_ints[i, 0] = genome.id
+			genome_ints[i, 1] = genome.parent
+			genome_ints[i, 2:5] = genome.color
+			genome_ints[i, 5:] = genome.attributes
+			
+			genome_floats[i, 0] = genome.fight
+			genome_floats[i, 1] = genome.grow
+			genome_floats[i, 2] = genome.seed
+			genome_floats[i, 3] = genome.seed_size
+
+		np.savez(filepath, step_breaks, history_ints, history_flaots, \
+													 genome_ints, genome_floats)

@@ -8,33 +8,50 @@ from collections import Counter
 
 from os.path import join as pjoin
 
-n = 50
-step_size = 20 # Read every 25th frame
-
-rootdir = sys.argv[1]
-history = np.load(pjoin(rootdir, 'history.npy'))
+n = 50 # how many genomes to color individually
 
 
-history = history[0::step_size]
-genomes = pickle.load(open(pjoin(rootdir, 'genomes.p'), 'rb'))
+npzfile = np.load(sys.argv[1])
 
-genome_colors = {}
-for genome in genomes:
-	r, g, b = genome.color
-	genome_colors[genome.id] = (float(r)/255, float(g)/255, float(b)/255)
+step_breaks = npzfile['arr_0']
+history_ints = npzfile['arr_1']
+history_floats = npzfile['arr_2']
+genome_ints = npzfile['arr_3']
+genome_floats = npzfile['arr_4']
 
 print('Loaded History.')
 
+n_gens = len(step_breaks)
+n_steps = 1000
+step_size = max(1, int(n_gens/n_steps))
+
+print('step_size:', step_size)
+
+genome_colors = {}
+for i in range(genome_ints.shape[0]):
+	g_id = genome_ints[i, 0]
+	r, g, b = genome_ints[i, 2:5] 
+	genome_colors[g_id] = (float(r)/255, float(g)/255, float(b)/255)
+
+def iterate_timesteps_individuals(g):
+	start = step_breaks[g-1] if g > 0 else 0
+	for i in range(start, step_breaks[g]):
+		id, genome_id = history_ints[i]
+		x, y, area = history_floats[i]
+		yield id, genome_id, x, y, area
+
 def n_most_common_genomes():
 	max_total_area = Counter()
-	for k, generation in enumerate(history):
+
+	for g in range(0, n_gens, step_size):
+
 		generation_total_area = Counter()
 		
-		for id, genome_id, x, y, area in generation:
+		for id, genome_id, x, y, area in iterate_timesteps_individuals(g):
 			generation_total_area[genome_id] += area
-		
+
 		for id, area in generation_total_area.items():
-			max_total_area[id] = max(area, max_total_area.get(id, 0))
+			max_total_area[id] = max(area, max_total_area.get(id, 0))	
 	
 	top_genomes = zip(*max_total_area.most_common(n))[0]
 	return top_genomes
@@ -46,13 +63,15 @@ top_genomes = n_most_common_genomes()
 top_genome_ordering = dict(zip(top_genomes, range(len(top_genomes))))
 
 top_genome_colors = [genome_colors[gid] for gid in top_genomes]
-top_genome_colors.append((1.0, 1.0, 1.0))
-# Create array to store.
-X_area = np.zeros((n+1, len(history)))
-X_count = np.zeros((n+1, len(history)))
+top_genome_colors.append((.3, .3, .3))
 
-for i, generation in enumerate(history):
-	for id, genome_id, x, y, area in generation:
+# Create array to store plotting.
+X_area = np.zeros((n+1, n_steps))
+X_count = np.zeros((n+1, n_steps))
+
+for i in range(n_steps):
+	g = i * step_size
+	for id, genome_id, x, y, area in iterate_timesteps_individuals(g):
 		if area == 0:
 			continue
 		if genome_id in top_genome_ordering:
@@ -62,12 +81,12 @@ for i, generation in enumerate(history):
 			X_area[-1, i] += area
 			X_count[-1, i] += 1
 
-for i in range(len(history)):
+for i in range(n_steps):
 	X_area[:, i] /= X_area[:,i].sum()
 
 print('Structured data for plotting.')
 
-x = np.arange(0, len(history)*step_size, step_size)
+x = np.arange(0, n_gens, step_size)
 f, axarr = plt.subplots(2, sharex=True, figsize=(20, 12))
 axarr[0].stackplot(x, X_area, colors=top_genome_colors)
 axarr[0].set_title('Species Total Area')

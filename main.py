@@ -20,6 +20,18 @@ def draw_sim(view, sim):
     for ind in sim.individuals.values():
         view.draw_circle((ind.x, ind.y), ind.radius, ind.genome.color, 0)
 
+        # if ind.x - ind.radius < 0:
+        #     view.draw_circle((ind.x+sim.width, ind.y), ind.radius, ind.genome.color, 0)
+        
+        # elif ind.x + ind.radius >= sim.width:
+        #     view.draw_circle((ind.x-sim.width, ind.y), ind.radius, ind.genome.color, 0)
+
+        # elif ind.y - ind.radius < 0:
+        #     view.draw_circle((ind.x, ind.y+sim.width), ind.radius, ind.genome.color, 0)
+        
+        # elif ind.y + ind.radius >= sim.height:
+        #     view.draw_circle((ind.x, ind.y-sim.width), ind.radius, ind.genome.color, 0)
+
     n_genomes = len(set(ind.genome.id for ind in sim.individuals.values()))
     
     view.draw_text((10, 10), ('n_individuals: %i' % len(sim.individuals)), font=18)
@@ -33,7 +45,7 @@ def prepare_dir(dir):
 
 ################################################################################
 
-def main(config, timesteps, out_dir):
+def main(config, timesteps, out_dir, img_interval, log_interval):
     assert not os.path.exists(out_dir)
     assert timesteps > 0
 
@@ -49,19 +61,22 @@ def main(config, timesteps, out_dir):
         sim.step()
         log.addGeneration(sim)
 
-        if i % 100  == 0:
+        if i % img_interval  == 0:
             print('Step:', i)
             genomes = set(ind.genome.id for ind in sim.individuals.values())
             print('n_individuals:', len(sim.individuals))
             print('n_genomes:', len(genomes))
             print()
+            
+            draw_sim(view, sim)
+            view.save(pjoin(out_dir, 'imgs/%06d.jpg'%i))
+        
+        if i % log_interval == 0 and i > 0:
+            log.save(pjoin(out_dir, 'archive_%i.npz'%i), config)
 
-        draw_sim(view, sim)
-        view.save(pjoin(out_dir, 'imgs/%06d.jpg'%i))
-    
     print('Done in:', time.time() - start)
 
-    log.save(out_dir)   
+    log.save(pjoin(out_dir, 'archive_final.npz'), config)
     with open(pjoin(out_dir, 'config.txt'), 'wb+') as fconfig:
         for key, value in config.items():
             fconfig.write(key+'\t'+str(value)+'\n')
@@ -71,6 +86,8 @@ if __name__ == '__main__':
     parser.add_argument("steps", help="Number of steps to run for.", type=int)
     parser.add_argument("config", help="Path to config file.")
     parser.add_argument("out", help="Path for output files.")
+    parser.add_argument('--log_interval', type=int, default=1000, help='number of iterations between each archive, default=1000')
+    parser.add_argument('--img_interval', type=int, default=100, help='number of iterations between each image, default=100')
     args = parser.parse_args()
 
     config = configparse.ConfigParser()
@@ -91,4 +108,4 @@ if __name__ == '__main__':
                             config.getfloat('genome', 'max_seed_size')),
     }
 
-    main(run_config, args.steps, args.out)
+    main(run_config, args.steps, args.out, args.img_interval, args.log_interval)

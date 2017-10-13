@@ -16,6 +16,3 @@ class Individual(object):
 	
 	def area(self):
 		return pi * self.radius**2
-
-	def distanceTo(self, other):
-		return hypot((self.x - other.x), (self.y - other.y))
