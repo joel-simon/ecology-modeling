@@ -86,7 +86,11 @@ for i in range(n_steps):
 
 print('Structured data for plotting.')
 
-x = np.arange(0, n_gens, step_size)
+x = np.arange(n_steps) * step_size
+
+print(x.shape)
+print(X_area.shape)
+
 f, axarr = plt.subplots(2, sharex=True, figsize=(20, 12))
 axarr[0].stackplot(x, X_area, colors=top_genome_colors)
 axarr[0].set_title('Species Total Area')

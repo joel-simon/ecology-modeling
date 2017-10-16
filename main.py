@@ -10,7 +10,7 @@ from draw import PygameDraw
 
 from simulation import Simulation
 from individual import Individual
-from reporter import Reporter
+from history import History, HistoryFull
 
 ################################################################################
 # Util functions.
@@ -49,10 +49,18 @@ def main(config, timesteps, out_dir, img_interval, log_interval):
     assert not os.path.exists(out_dir)
     assert timesteps > 0
 
+    logfull = False
+
     start = time.time() 
     sim = Simulation(**config)
-    log = Reporter()
-    view = PygameDraw(config['width']*5, config['height']*5, scale=5)
+    
+    if logfull:
+        log = HistoryFull()
+    else:
+        log = History()
+
+    scale = 3
+    view = PygameDraw(config['width']*scale, config['height']*scale, scale=scale)
     
     prepare_dir(pjoin(out_dir, 'imgs'))
     draw_sim(view, sim)
@@ -72,11 +80,12 @@ def main(config, timesteps, out_dir, img_interval, log_interval):
             view.save(pjoin(out_dir, 'imgs/%06d.jpg'%i))
         
         if i % log_interval == 0 and i > 0:
-            log.save(pjoin(out_dir, 'archive_%i.npz'%i), config)
+            log.save(pjoin(out_dir, 'archive_%i'%i), config)
 
     print('Done in:', time.time() - start)
 
-    log.save(pjoin(out_dir, 'archive_final.npz'), config)
+    log.save(pjoin(out_dir, 'archive_final'), config)
+
     with open(pjoin(out_dir, 'config.txt'), 'wb+') as fconfig:
         for key, value in config.items():
             fconfig.write(key+'\t'+str(value)+'\n')
@@ -86,6 +95,7 @@ if __name__ == '__main__':
     parser.add_argument("steps", help="Number of steps to run for.", type=int)
     parser.add_argument("config", help="Path to config file.")
     parser.add_argument("out", help="Path for output files.")
+    # parser.add_argument('--log_ful', type=int, default=1000, help='number of iterations between each archive, default=1000')
     parser.add_argument('--log_interval', type=int, default=1000, help='number of iterations between each archive, default=1000')
     parser.add_argument('--img_interval', type=int, default=100, help='number of iterations between each image, default=100')
     args = parser.parse_args()

@@ -2,9 +2,17 @@ from __future__ import print_function, division
 import pickle
 import numpy as np
 from os.path import join as pjoin
+from collections import Counter
 
-class Reporter(object):
+class HistoryFull(object):
+	""" Store a complete representation of the run including every individual
+		at each generation. Useful if sections want to generaed later and
+		animated. Takes a large amount of space for longer runs.
+	"""
 	def __init__(self):
+		self._init()
+
+	def _init(self):
 		self._genomes = dict()
 		self._stepBreaks = []
 		self._history_ints = []
@@ -42,3 +50,25 @@ class Reporter(object):
 
 		np.savez(filepath, step_breaks, history_ints, history_flaots, \
 													 genome_ints, genome_floats)
+		self._init()
+
+class History(object):
+	def __init__(self):
+		self.data = []
+		self.genomes = {}
+
+	def addGeneration(self, sim):
+		genome_area = Counter()
+		genome_count = Counter()
+		
+		for ind in sim.individuals.values():
+			genome_area[ind.genome.id] += ind.area()
+			genome_count[ind.genome.id] += 1
+			self.genomes[ind.genome.id] = ind.genome
+
+		gen_data = [(id, n, genome_area[id]/n) for id,n in genome_count.items()]
+		self.data.append(gen_data)
+
+	def save(self, filepath, config):
+		print('Saving the history to:', filepath)
+		pickle.dump((self.data, self.genomes), open(filepath, 'wb'), protocol=-1)
