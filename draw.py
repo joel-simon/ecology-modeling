@@ -107,7 +107,7 @@ class PygameDraw(object):
     def draw_rect(self, rect, color, width=1):
         x, y = self.map_point((rect[0], rect[1]))
         w, h = int(self.scale*rect[2]), int(self.scale*rect[3])
-        rect = (x, y, w, -h)
+        rect = (x, y, w, h)
 
         if width == 0:
             points = [(x, y), (x+w, y), (x+w, y-h), (x, y-h)]
@@ -127,16 +127,17 @@ class PygameDraw(object):
         # print(y, self.h)
         self.surface.blit(s, (x, y-h))
 
-    def draw_text(self, position, string, font=8, color=BLACK, center=False):
-        # font = int(self.scale * font)
+    def draw_text(self, position, string, font=8, color=BLACK, center=False, fontfamily='monospace'):
+        font = int(self.scale * font)
         # x, y = self.map_point(position)
         x, y = position
 
-        # if font not in self.fonts:
-        #     self.fonts[font] = pygame.font.SysFont("monospace", font)
+        key = (font, fontfamily)
+        if key not in self.fonts:
+            self.fonts[font] = pygame.font.SysFont(fontfamily, font)
         
-        # text = self.fonts[font].render(string, 0, color)
-        text = self.font.render(string, 1, color)
+        text = self.fonts[font].render(string, 0, color)
+        # text = self.font.render(string, 1, color)
 
         if center:
             w = text.get_rect().width

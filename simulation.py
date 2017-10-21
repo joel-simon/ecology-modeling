@@ -6,7 +6,7 @@ from collections import namedtuple
 import aabb
 import numpy as np
 from individual import Individual
-from utils import randomly_distribute, create_biases, area_to_radius
+from utils import randomly_distribute, create_biases, area_to_radius, random_color
 
 Genome = namedtuple('Genome', ['id', 'parent', 'fight', 'grow', 'seed', 
                                'seed_size', 'attributes', 'color'])
@@ -14,7 +14,8 @@ Genome = namedtuple('Genome', ['id', 'parent', 'fight', 'grow', 'seed',
 class Simulation(object):
     def __init__(self, width, height, n_start, n_attributes, bias_power,
                  seed_size_range, n_randseed, p_death, p_disturbance,
-                 disturbance_power, seed_cost_multiplier):
+                 disturbance_power, seed_cost_multiplier,
+                 growth_cost_multiplier, map):
         ########################################################################
         # Configuration.
         
@@ -30,6 +31,11 @@ class Simulation(object):
         self.disturbance_power = disturbance_power
         self.total_attributes = 10
         self.seed_cost_multiplier = seed_cost_multiplier
+        self.growth_cost_multiplier = growth_cost_multiplier
+        self.map = map
+        if self.map is not None:
+            self.map = np.load(self.map)
+
         self.max_radius = min(width, height) / 2.0
         
         ########################################################################
@@ -56,7 +62,18 @@ class Simulation(object):
         box_size[0] = self.width
         box_size[1] = self.height
         self.tree.setBoxSize(box_size)
+        ########################################################################
         
+        if self.map is not None:
+            map_scale = 3
+            self.world = aabb.Tree(2, 0, np.count_nonzero(map))
+            p = aabb.DoubleVector(2)
+
+            for i, (x, y) in enumerate(zip(*np.where(self.map == 0))):
+                p[0] = x * map_scale
+                p[1] = self.height - (y * map_scale)
+                self.world.insertParticle(i, p, map_scale)
+
         ########################################################################
         # Create intitial population.
         
@@ -72,8 +89,8 @@ class Simulation(object):
         s = fight+grow+seed
         attributes = randomly_distribute(self.total_attributes,
                                          self.n_attributes)
-        color = (randint(0,255), randint(0,255), randint(0,255))
         
+        color = random_color((0, 128, 255))
         id = self.next_gen_id
         genome = Genome(id, id, fight/s, grow/s, seed/s, seed_size, attributes, color)
         self.genomes[genome.id] = genome
@@ -105,6 +122,17 @@ class Simulation(object):
 
         if not self.isEmptySpace(x, y, radius):
             return None
+
+        ########################################################################
+        if self.map is not None:
+            lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
+            lower[0] = x - seed_size
+            lower[1] = y - seed_size
+            upper[0] = x + seed_size
+            upper[1] = y + seed_size
+            if len(self.world.query(aabb.AABB(lower, upper))) == 0:
+                return None
+        ########################################################################
 
         energy = pi * radius * radius
         ind = Individual(self.next_ind_id, genome, x, y, radius, energy)
@@ -142,19 +170,19 @@ class Simulation(object):
         
         ind_area = individual.area()
         
-        # energy is based on it and 3.4 power rule.
+        # energy is based on it and 3/4 power rule.
         # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
         new_energy = ind_area**.75
         
-        grow_energy = sqrt(new_energy * individual.genome.grow)
-        seed_energy = sqrt(new_energy * individual.genome.seed)
+        grow_energy = sqrt(new_energy * individual.genome.grow) / self.growth_cost_multiplier
+        seed_energy = sqrt(new_energy * individual.genome.seed) / self.seed_cost_multiplier
         individual.energy += seed_energy
 
         individual.radius = area_to_radius(ind_area + grow_energy)
         individual.radius = min(self.max_radius, individual.radius)
 
         # Number of seeds.
-        seed_cost = individual.genome.seed_size * self.seed_cost_multiplier
+        seed_cost = individual.genome.seed_size
         num_seeds = int((individual.energy) / seed_cost)
         individual.energy -= num_seeds * seed_cost
         seeds.append((num_seeds, individual.genome))
