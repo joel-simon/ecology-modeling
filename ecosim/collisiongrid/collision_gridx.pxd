@@ -1,5 +1,6 @@
 from cymem.cymem cimport Pool
 
+# Singly linked list structure.
 cdef struct Entry:
     int value
     Entry *next
@@ -7,7 +8,6 @@ cdef struct Entry:
 cdef class CollisionGrid:
     cdef Pool mem
     cdef Entry **grid
-    # cdef object grid
     cdef public double blocksize
     cdef public int width, height, nx, ny
     cdef public dict particles

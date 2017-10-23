@@ -54,7 +54,7 @@ class Simulation(object):
 
         ########################################################################
 
-        self.world = CollisionGrid(self.width, self.height, 10)
+        self.world = CollisionGrid(self.width, self.height, 2)
 
         ########################################################################
 
@@ -99,9 +99,6 @@ class Simulation(object):
         if not self.world.isEmpty(x, y, radius):
             return None
 
-        # for ind2 in self.individuals.values():
-        #     d = self.distance(x, y, ind2.x, ind2.y)
-        #     assert d > radius + ind2.radius, (d, (x, y), (ind2.x, ind2.y))
         ########################################################################
         # if self.map is not None:
         #     lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)

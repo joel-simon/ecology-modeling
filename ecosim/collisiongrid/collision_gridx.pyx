@@ -11,6 +11,8 @@ from cymem.cymem cimport Pool
 from math import hypot
 
 cdef class CollisionGrid:
+    """ Fast collision detection in mass particle system.
+    """
     def __init__(self, width, height, blocksize):
         assert width % blocksize == 0
         assert height % blocksize == 0
@@ -24,7 +26,6 @@ cdef class CollisionGrid:
         self.ny = int(height / blocksize)
 
         self.grid = <Entry **>self.mem.alloc(self.nx*self.ny, sizeof(Entry *))
-        # elf.grid = [[set() for _ in range(self.shape[0])] for _ in range(self.shape[1])]
 
         cdef int i = 0
         for i in range(self.nx * self.ny):
@@ -33,6 +34,8 @@ cdef class CollisionGrid:
         self.particles = dict()
 
     cpdef list get_block(self, int ix, int iy):
+        """ Debug function to return linked list as python list.
+        """
         cdef Entry *p = self.grid[ix + iy*self.nx]
         cdef list result = []
 
@@ -43,12 +46,14 @@ cdef class CollisionGrid:
         return result
 
     cpdef void grid_add(self, int id, int ix, int iy) except *:
+        """ Helper function to prepend value to linked list.
+        """
         cdef int i = ix + iy*self.nx
 
-        assert ix >= 0 and ix < self.nx
-        assert iy >= 0 and iy < self.ny
+        if ix < 0 or ix >= self.nx:
+            raise ValueError()
 
-        if id in self.get_block(ix, iy):
+        if iy < 0 or iy >= self.ny:
             raise ValueError()
 
         cdef Entry *e = <Entry *>self.mem.alloc(1, sizeof(Entry *))
@@ -59,6 +64,9 @@ cdef class CollisionGrid:
         self.grid[i] = e
 
     cpdef void grid_remove(self, int id, int ix, int iy) except *:
+        """ Helper function to remove value from linked list.
+            Assumes it only occures once.
+        """
         cdef int i = ix + iy*self.nx
 
         cdef Entry *p = self.grid[i]
@@ -75,6 +83,7 @@ cdef class CollisionGrid:
                 return
             p = p.next
 
+        # Was not found!
         raise KeyError(id)
 
     cpdef bint isEmpty(self, double x, double y, double r) except *:
@@ -109,10 +118,17 @@ cdef class CollisionGrid:
     cpdef void insertParticle(self, int id, double x, double y, double r) except *:
         cdef int cx, cy
 
-        assert id not in self.particles
-        assert x >= 0 and x < self.width
-        assert y >= 0 and y < self.height
-        assert r > 0
+        if x < 0 or x >= self.width:
+            raise ValueError()
+
+        if y < 0 or y >= self.height:
+            raise ValueError()
+
+        if id in self.particles:
+            raise ValueError()
+
+        if r < 0:
+            raise ValueError()
 
         self.particles[id] = (x, y, r)
 
@@ -125,8 +141,6 @@ cdef class CollisionGrid:
 
                 cx += 1
             cy += 1
-
-
 
     cpdef void removeParticle(self, int id) except *:
         cdef double x, y, r
@@ -147,20 +161,23 @@ cdef class CollisionGrid:
             cy += 1
 
     cpdef void updateRadius(self, int id, double r)  except *:
-        """ Return True if update was accepted and False otherwise.
-        """
-        assert r > 0
 
-        x, y, r_old = self.particles[id]
+        if r < 0:
+            raise ValueError()
 
-        # if abs(r/r_old) / self.blocksize < 1:
+        cdef double x, y, r0
+        x, y, r0 = self.particles[id]
+
+        cdef int cy = max(0, <int>floor((y-r) / self.blocksize))
+        cdef int cy0 = max(0, <int>floor((y-r0) / self.blocksize))
+
+        if cy == cy0:
+            return
+
         self.removeParticle(id)
         self.insertParticle(id, x, y, r)
 
     cpdef set query(self, double x0, double y0, double x1, double y1):
-        assert x0 < x1
-        assert y0 < y1
-
         cdef set seen = set()
         cdef int cx, cy
         cdef Entry *p
