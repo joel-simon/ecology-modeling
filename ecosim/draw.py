@@ -65,12 +65,13 @@ class PygameDraw(object):
         position = self.map_point(position)
         r  = int(radius*self.scale)
         width = int(width*self.scale)
+
         if width == 0:
             x, y = position
             pygame.gfxdraw.filled_circle(self.surface, x, y, r, color)
-        # else:
-        pygame.gfxdraw.aacircle(self.surface, x, y, r, color)
-            # pygame.draw.circle(self.surface, color, position, r, width)
+
+        if r > 1:
+            pygame.gfxdraw.aacircle(self.surface, x, y, r, color)
 
     def draw_line(self, positionA, positionB, color, width=1):
         a = self.map_point(positionA)
@@ -135,7 +136,7 @@ class PygameDraw(object):
         key = (font, fontfamily)
         if key not in self.fonts:
             self.fonts[font] = pygame.font.SysFont(fontfamily, font)
-        
+
         text = self.fonts[font].render(string, 0, color)
         # text = self.font.render(string, 1, color)
 
@@ -143,7 +144,7 @@ class PygameDraw(object):
             w = text.get_rect().width
             h = text.get_rect().height
             self.surface.blit(text, (int(x-w/2.), int(y-h/2.)))
-        
+
         else:
-        
+
             self.surface.blit(text, (x, y))
