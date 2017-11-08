@@ -17,6 +17,7 @@ class Simulation(object):
                  seed_size_range, n_randseed, p_death, p_disturbance,
                  disturbance_power, seed_cost_multiplier,
                  growth_cost_multiplier, map):
+
         ########################################################################
         # Configuration.
 
@@ -30,19 +31,18 @@ class Simulation(object):
         self.p_death = p_death
         self.p_disturbance = p_disturbance
         self.disturbance_power = disturbance_power
-        self.total_attributes = 10
         self.seed_cost_multiplier = seed_cost_multiplier
         self.growth_cost_multiplier = growth_cost_multiplier
         self.map = map
-
-        if self.map is not None:
-            self.map = np.load(self.map)
-
+        if self.map is not None: self.map = np.load(self.map)
         self.max_radius = min(width, height) / 2.0
 
         ########################################################################
+        # Counters.
+
         self.next_ind_id = 0
         self.next_gen_id = 0
+        self.step_count = 0
 
         ########################################################################
         # Core objects.
@@ -51,9 +51,6 @@ class Simulation(object):
         self.genomes = dict()
         self.biases = create_biases(self.n_attributes, self.bias_power)
         self.combat_hash = dict()
-
-        ########################################################################
-
         self.world = CollisionGrid(self.width, self.height, 2)
 
         ########################################################################
@@ -71,20 +68,25 @@ class Simulation(object):
         ########################################################################
         # Create intitial population.
 
-        for _ in range(n_start):
+        n_copies = 5
+        for _ in range(n_start//n_copies):
             g = self.randomGenome()
-            x = random() * width
-            y = random() * height
-            self.createIndividual(g, x, y, g.seed_size)
+            for _ in range(n_copies):
+                x = random() * width
+                y = random() * height
+                self.createIndividual(g, x, y, g.seed_size)
+
+        ########################################################################
 
     def randomGenome(self):
         seed_size = uniform(*self.seed_size_range)
         fight, grow, seed = random(), random(), random()
         s = fight+grow+seed
-        attributes = randomly_distribute(self.total_attributes,
-                                         self.n_attributes)
 
-        color = random_color((0, 128, 255))
+        attributes = np.random.rand(self.n_attributes)
+        attributes /= (attributes.sum() / self.n_attributes)
+
+        color = random_color()#saturation=1.0, brightness=.7)
         id = self.next_gen_id
         genome = Genome(id, id, fight/s, grow/s, seed/s, seed_size, attributes, color)
         self.genomes[genome.id] = genome
@@ -99,6 +101,10 @@ class Simulation(object):
         if not self.world.isEmpty(x, y, radius):
             return None
 
+        # for id, individual in self.individuals.items():
+        #     d = self.distance(individual.x, individual.y, x, y)
+        #     assert (d > individual.radius + radius), (d ,individual.radius + radius)
+
         ########################################################################
         # if self.map is not None:
         #     lower, upper = aabb.DoubleVector(2), aabb.DoubleVector(2)
@@ -111,7 +117,9 @@ class Simulation(object):
         ########################################################################
 
         energy = pi * radius * radius
-        ind = Individual(self.next_ind_id, genome, x, y, radius, energy)
+        ind = Individual(self.next_ind_id, genome, x, y, radius, energy, \
+                                  self.growth_cost_multiplier,
+                                  self.seed_cost_multiplier)
 
         self.next_ind_id += 1
         self.individuals[ind.id] = ind
@@ -121,9 +129,10 @@ class Simulation(object):
 
         return ind
 
-    def destroyIndividual(self, id):
-        del self.individuals[id]
-        self.world.removeParticle(id)
+    def destroyIndividual(self, individual):
+        individual.alive = False
+        del self.individuals[individual.id]
+        self.world.removeParticle(individual.id)
 
     def disturbRectangle(self):
         x0 = random()*(self.width * (1 - self.disturbance_power))
@@ -132,43 +141,52 @@ class Simulation(object):
         y1 = y0 + self.height*self.disturbance_power
 
         for id in self.world.query(x0, y0, x1, y1):
-            self.destroyIndividual(id)
+            self.destroyIndividual(self.individuals[id])
 
-    def stepUpdateIndividual(self, individual, seeds):
-        """ Update the individuals attributes, spatial map and create seeds.
-            We change the seed list in place.
-            'seeds' is a list of tuples [(n_seeds, genome), ...]
-        """
+    # def stepUpdateIndividual(self, individual):
+    #     """ Update the individuals attributes, spatial map and create seeds.
+    #     """
 
-        ind_area = individual.area()
+    #     ind_area = individual.area()
 
-        # energy is based on it and 3/4 power rule.
-        # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
-        new_energy = ind_area**.75
+    #     # energy is based on it and 3/4 power rule.
+    #     # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC33381/
+    #     new_energy = ind_area**.75
 
-        grow_energy = sqrt(new_energy * individual.genome.grow) / self.growth_cost_multiplier
-        seed_energy = sqrt(new_energy * individual.genome.seed) / self.seed_cost_multiplier
-        individual.energy += seed_energy
+    #     grow_energy = sqrt(new_energy * individual.genome.grow) / self.growth_cost_multiplier
+    #     seed_energy = sqrt(new_energy * individual.genome.seed) / self.seed_cost_multiplier
+    #     individual.energy += seed_energy
 
-        individual.radius = area_to_radius(ind_area + grow_energy)
-        individual.radius = min(self.max_radius, individual.radius)
+    #     individual.radius = area_to_radius(ind_area + grow_energy)
+    #     individual.radius = min(self.max_radius, individual.radius)
 
-        # Number of seeds.
-        seed_cost = individual.genome.seed_size
-        num_seeds = int((individual.energy) / seed_cost)
-        individual.energy -= num_seeds * seed_cost
-        seeds.append((num_seeds, individual.genome))
+    #     # Number of seeds.
+    #     seed_cost = individual.genome.seed_size
+    #     num_seeds = int((individual.energy) / seed_cost)
 
-    def stepSpreadSeeds(self, seeds):
+    #     individual.energy -= num_seeds * seed_cost
+    #     individual.next_seeds = num_seeds
+
+    def stepSpreadSeeds(self):
         """ Spread seeds.
         """
-        for n, genome in seeds:
+        if self.step_count < 5000:
+            for _ in range(self.n_randseed):
+                genome = self.randomGenome()
+                x, y = random() * self.width, random() * self.height
+                self.createIndividual(genome, x, y, genome.seed_size)
+
+        to_seed = []
+        for individual in self.individuals.values():
+            to_seed.append((individual.next_seeds, individual.genome))
+
+        for n, genome in to_seed:
             for _ in range(n):
                 x, y = random() * self.width, random() * self.height
                 self.createIndividual(genome, x, y, genome.seed_size)
 
     def distance(self, x1, y1, x2, y2):
-        """ Distance function with periodic boundaries.
+        """ Distance function with periodic boundaries #TODO.
         """
         dx = x1 - x2
         # if abs(dx) > self.width*0.5:
@@ -187,97 +205,103 @@ class Simulation(object):
         x1 = individual.x + individual.radius
         y1 = individual.y + individual.radius
         return self.world.query(x0, y0, x1, y1)
+        # return self.world.queryCircle(individual.x, individual.y, individual.radius)
 
     def step(self):
-        seeds = [(1, self.randomGenome()) for _ in range(self.n_randseed)]
-
         for individual in self.individuals.values():
             individual.blocked = False
 
-        # Create copy of list so we can edit while we iterate randomly.
-        id_list = list(self.individuals.keys())
-        shuffle(id_list)
+        # Store in seperate list to avoid editing dict during iteration.
+        to_kill = []
 
-        for id in id_list:
-            individual = self.individuals.get(id, None)
+        for id, individual in self.individuals.items():
 
-            # Died from combat this turn.
-            if individual is None:
-                continue
-
-            # We already lost a fight this turn, cannot grow.
-            if individual.blocked:
+            # Died from combat this turn or already lost a fight
+            if not individual.alive or individual.blocked:
                 continue
 
             # Chance of random death.
             if random() < self.p_death:
-                self.destroyIndividual(id)
+                individual.alive = False
+                to_kill.append(individual)
                 continue
 
-            # Update individual list of seeds in place.
-            self.stepUpdateIndividual(individual, seeds)
+            # Update individuals.
+            individual.update()
 
             # Query by individuals new size.
-            over = self.individualOverlap(individual)
-            for id_other in over:
+            for id_other in self.world.queryCircle(individual.x, individual.y, \
+                                                            individual.radius):
                 if id_other == id:
                     continue
 
                 ind_other = self.individuals[id_other]
-                dist = self.distance(individual.x, individual.y,
-                                     ind_other.x, ind_other.y)
 
-                # If overlapping.
-                if dist > (individual.radius + ind_other.radius):
+                if not ind_other.alive:
                     continue
+
+                dist = self.distance(individual.x, individual.y, ind_other.x, \
+                                                                ind_other.y)
 
                 winner, loser = self.combat(individual, ind_other)
 
                 # The loser shrinks.
                 loser.blocked = True
+
                 loser.radius = (dist - winner.radius) * .95
-                if loser.radius <= loser.start_radius:
-                    self.destroyIndividual(loser.id)
+
+                killed = loser.radius <= loser.start_radius
+
+                if killed:
+                    loser.alive = False
+                    to_kill.append(loser)
 
                 # Stop checking others if this individual lost.
                 if loser is individual:
                     break
 
-        # Udate tree with new positions.
-        for id, individual in self.individuals.items():
-            self.updateRadius(individual)
+                if loser is not individual and not killed:
+                    self.updateRadius(loser)
 
-        self.stepSpreadSeeds(seeds)
+            if individual.alive:
+                self.updateRadius(individual)
+
+        for individual in to_kill:
+            self.destroyIndividual(individual)
+
+        self.stepSpreadSeeds()
 
         if random() < self.p_disturbance:
             self.disturbRectangle()
 
-    def genomeWinProbabiliy(self, genome1, genome2):
+        self.step_count += 1
 
-        if genome1.id < genome2.id:
-            key = (genome1.id, genome2.id)
-        else:
-            key = (genome2.id, genome1.id)
+    def genomeWinWeights(self, genome1, genome2):
+        max_a, max_b = genome1.attributes[0], genome2.attributes[0]
+        max_diff = abs(max_a - max_b)
 
-        if key in self.combat_hash:
-            return self.combat_hash[key]
+        for a1, a2 in zip(genome1.attributes, genome2.attributes):
+            if abs(a1 - a2) > max_diff:
+                max_a = a1
+                max_b = a2
+                max_diff = abs(a1 - a2)
 
-        a1, a2 = genome1.attributes, genome2.attributes
-
-        n = len(a1)
-        l1 = sum( n*a - np.dot(a2, self.biases[i]) for i, a in enumerate(a1) )
-        l2 = sum( n*a - np.dot(a1, self.biases[i]) for i, a in enumerate(a2) )
-
-        self.combat_hash[key] = (l1, l2)
-
-        return l1, l2
+        return float(max_a), float(max_b)
 
     def combat(self, ind1, ind2):
         """ Return who outcompetes whom.
         """
-        w1, w2 = self.genomeWinProbabiliy(ind1.genome, ind2.genome)
+        key = (ind1.genome.id, ind2.genome.id)
+
+        if key in self.combat_hash:
+            w1, w2 = self.combat_hash[key]
+        else:
+            w1, w2 = self.genomeWinWeights(ind1.genome, ind2.genome)
+            self.combat_hash[key] = (w1, w2)
+
         w1 *= ind1.area()
         w2 *= ind2.area()
+
         if w1 == w2: # handle 0 case too.
             p = .5
         else:
@@ -286,6 +310,9 @@ class Simulation(object):
         return (ind1, ind2) if random() < p else (ind2, ind1)
 
     def isValid(self):
+        for id1, ind1 in self.individuals.items():
+            assert ind1.radius == self.world.particles[id1][2]
+
         for id1, ind1 in self.individuals.items():
             for id2, ind2 in self.individuals.items():
                 if id1 == id2:

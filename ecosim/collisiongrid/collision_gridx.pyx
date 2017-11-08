@@ -1,5 +1,5 @@
 # cython: boundscheck=False
-# cython: wraparound=True
+# cython: wraparound=False
 # cython: initializedcheck=False
 # cython: nonecheck=False
 # cython: cdivision=True
@@ -7,8 +7,6 @@
 from __future__ import print_function
 from libc.math cimport abs, floor, sqrt
 from cymem.cymem cimport Pool
-
-from math import hypot
 
 cdef class CollisionGrid:
     """ Fast collision detection in mass particle system.
@@ -168,14 +166,21 @@ cdef class CollisionGrid:
         cdef double x, y, r0
         x, y, r0 = self.particles[id]
 
-        cdef int cy = max(0, <int>floor((y-r) / self.blocksize))
-        cdef int cy0 = max(0, <int>floor((y-r0) / self.blocksize))
+        cdef int cy = <int>floor((y-r) / self.blocksize)
+        cdef int cy0 = <int>floor((y-r0) / self.blocksize)
+        cdef int cx = <int>floor((x-r) / self.blocksize)
+        cdef int cx0 = <int>floor((x-r0) / self.blocksize)
 
-        if cy == cy0:
-            return
+        cdef int ey = <int>floor((y+r) / self.blocksize)
+        cdef int ey0 = <int>floor((y+r0) / self.blocksize)
+        cdef int ex = <int>floor((x+r) / self.blocksize)
+        cdef int ex0 = <int>floor((x+r0) / self.blocksize)
 
-        self.removeParticle(id)
-        self.insertParticle(id, x, y, r)
+        if cy == cy0 and cx == cx0 and ey == ey0 and ex == ex0:
+            self.particles[id] = (x, y, r)
+        else:
+            self.removeParticle(id)
+            self.insertParticle(id, x, y, r)
 
     cpdef set query(self, double x0, double y0, double x1, double y1):
         cdef set seen = set()
@@ -196,5 +201,36 @@ cdef class CollisionGrid:
                 cx += 1
             cy += 1
 
+        return seen
+
+    cpdef set queryCircle(self, double x, double y, double r):
+        """ Return set of all particle that overlap circle.
+        """
+        cdef int cx, cy, id
+        cdef double x0, y0, r0, dx, dy
+        cdef set seen = set()
+        cdef Entry *p
+
+        cy = max(0, <int>floor((y-r) / self.blocksize))
+        while (cy * self.blocksize) <= min( self.height-1, y+r):
+
+            cx = max(0, <int>floor((x-r) / self.blocksize))
+            while (cx * self.blocksize) <= min( self.width-1, x+r):
+
+                p = self.grid[cx + cy*self.nx]
+
+                while p != NULL:
+                    id = p.value
+                    x0, y0, r0 = self.particles[id]
+                    dx = x - x0
+                    dy = y - y0
+
+                    if sqrt(dx*dx + dy*dy) < r+r0:
+                        seen.add(id)
+
+                    p = p.next
+
+                cx += 1
+            cy += 1
 
         return seen

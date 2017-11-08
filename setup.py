@@ -14,6 +14,8 @@ import numpy
 extensions = [
     Extension('ecosim/collisiongrid/collision_gridx',
              ['ecosim/collisiongrid/collision_gridx.pyx']),
+
+    Extension('ecosim/individual', ['ecosim/individual.pyx']),
 ]
 
 setup(

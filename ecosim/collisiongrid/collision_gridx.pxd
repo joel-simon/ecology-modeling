@@ -23,3 +23,4 @@ cdef class CollisionGrid:
     cpdef void removeParticle(self, int id) except *
     cpdef void updateRadius(self, int id, double r) except *
     cpdef set query(self, double x0, double y0, double x1, double y1)
+    cpdef set queryCircle(self, double x, double y, double r)
