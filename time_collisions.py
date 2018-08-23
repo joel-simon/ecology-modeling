@@ -4,7 +4,7 @@ import random
 # import aabb
 from ecosim.collisiongrid import collision_gridx, collision_grid
 
-worldx  = collision_gridx.CollisionGrid(20, 20, 1)
+worldx = collision_gridx.CollisionGrid(20, 20, 1)
 world = collision_grid.CollisionGrid(20, 20, 1)
 
 def overlaps(x1, y1, r1, x2, y2, r2):

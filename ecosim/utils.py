@@ -10,7 +10,7 @@ import colorsys
 def area_to_radius(area):
 	return sqrt(area/pi)
 
-def random_color(base=None, saturation=.50, brightness=.95):
+def random_color(base=None, saturation=.50, brightness=.90):
 	""" Returns a 3-tuple of integers in range [0, 255]
 	"""
 	if base is None:

@@ -65,9 +65,9 @@ class PygameDraw(object):
         position = self.map_point(position)
         r  = int(radius*self.scale)
         width = int(width*self.scale)
+        x, y = position
 
         if width == 0:
-            x, y = position
             pygame.gfxdraw.filled_circle(self.surface, x, y, r, color)
 
         if r > 1:

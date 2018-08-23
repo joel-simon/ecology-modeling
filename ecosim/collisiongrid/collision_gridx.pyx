@@ -5,17 +5,18 @@
 # cython: cdivision=True
 
 from __future__ import print_function
+
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.math cimport abs, floor, sqrt
-from cymem.cymem cimport Pool
+# from cymem.cymem cimport Pool
 
 cdef class CollisionGrid:
     """ Fast collision detection in mass particle system.
     """
-    def __init__(self, width, height, blocksize):
+    def __cinit__(self, width, height, blocksize):
         assert width % blocksize == 0
         assert height % blocksize == 0
 
-        self.mem = Pool()
         self.width = width
         self.height = height
         self.blocksize = blocksize
@@ -23,13 +24,33 @@ cdef class CollisionGrid:
         self.nx = int(width / blocksize)
         self.ny = int(height / blocksize)
 
-        self.grid = <Entry **>self.mem.alloc(self.nx*self.ny, sizeof(Entry *))
+        self.grid = <Entry **>PyMem_Malloc(self.nx * self.ny * sizeof(Entry *))
+
+        if not self.grid:
+            raise MemoryError()
 
         cdef int i = 0
         for i in range(self.nx * self.ny):
             self.grid[i] = NULL
 
         self.particles = dict()
+
+        print('Created CollisionGrid', (self.nx, self.ny))
+
+    def __dealloc__(self):
+        cdef Entry *head
+        cdef Entry *temp
+        cdef int i = 0
+
+        for i in range(self.nx * self.ny):
+            head = self.grid[i]
+
+            while head != NULL:
+                temp = head
+                head = head.next
+                PyMem_Free(<void*>temp)
+
+        PyMem_Free(<void*>self.grid)
 
     cpdef list get_block(self, int ix, int iy):
         """ Debug function to return linked list as python list.
@@ -54,7 +75,10 @@ cdef class CollisionGrid:
         if iy < 0 or iy >= self.ny:
             raise ValueError()
 
-        cdef Entry *e = <Entry *>self.mem.alloc(1, sizeof(Entry *))
+        cdef Entry *e = <Entry *>PyMem_Malloc(sizeof(Entry))
+
+        if not e:
+            raise MemoryError()
 
         e.value = id
         e.next = self.grid[i]
@@ -66,23 +90,27 @@ cdef class CollisionGrid:
             Assumes it only occures once.
         """
         cdef int i = ix + iy*self.nx
+        cdef Entry *temp = self.grid[i]
+        cdef Entry *prev
 
-        cdef Entry *p = self.grid[i]
-
-        if p == NULL:
+        if temp == NULL:
             raise KeyError(id)
-        elif p.value == id:
-            self.grid[i] = p.next
+
+        elif temp.value == id:
+            # Need to remove head of list.
+            self.grid[i] = temp.next
+            PyMem_Free(<void*>temp)
             return
 
-        while p.next != NULL:
-            if p.next.value == id:
-                p.next = p.next.next
-                return
-            p = p.next
+        while temp is not NULL and temp.value != id:
+            prev = temp
+            temp = temp.next
 
-        # Was not found!
-        raise KeyError(id)
+        if temp is NULL:
+            raise KeyError(id)
+
+        prev.next = temp.next
+        PyMem_Free(temp)
 
     cpdef bint isEmpty(self, double x, double y, double r) except *:
         cdef int cx, cy, id0
@@ -216,11 +244,11 @@ cdef class CollisionGrid:
 
             cx = max(0, <int>floor((x-r) / self.blocksize))
             while (cx * self.blocksize) <= min( self.width-1, x+r):
-
                 p = self.grid[cx + cy*self.nx]
 
-                while p != NULL:
+                while p is not NULL:
                     id = p.value
+
                     x0, y0, r0 = self.particles[id]
                     dx = x - x0
                     dy = y - y0
@@ -232,5 +260,4 @@ cdef class CollisionGrid:
 
                 cx += 1
             cy += 1
-
         return seen

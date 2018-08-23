@@ -12,10 +12,9 @@ from Cython.Distutils import build_ext
 import numpy
 
 extensions = [
-    Extension('ecosim/collisiongrid/collision_gridx',
+    Extension('ecosim.collisiongrid.collision_gridx',
              ['ecosim/collisiongrid/collision_gridx.pyx']),
-
-    Extension('ecosim/individual', ['ecosim/individual.pyx']),
+    Extension('ecosim.individual', ['ecosim/individual.pyx']),
 ]
 
 setup(

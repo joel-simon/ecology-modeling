@@ -6,74 +6,118 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
 from os.path import join as pjoin
+import argparse
+import shutil
 sys.path.append(os.path.abspath('.'))
 
-n = 50 # how many genomes to color individually
-n_steps = 1000
-filename = sys.argv[1]
+def format_color(rgb):
+    r, g, b = rgb
+    return float(r)/255, float(g)/255, float(b)/255
 
-history, genomes = pickle.load(open(filename, 'rb'))
-print('Loaded History.')
+def n_most_common_genomes(n):
+    max_total_area = Counter()
+    for g in history[::step_size]:
+        for gid, count, area in g:
+            max_total_area[gid] = max(area*count, max_total_area.get(gid, 0))
+    top_genomes = list(zip(*max_total_area.most_common(n)))[0]
+    return top_genomes
 
-n_gens = len(history)
-step_size = max(1, int(n_gens/n_steps))
-print('step_size:', step_size)
+def plot(x, X_area, X_count, colors):
+    f, axarr = plt.subplots(2, sharex=True, figsize=(12, 8))
+    axarr[0].stackplot(x, X_area, colors=colors)
+    axarr[0].set_title('Species Total Area')
+    axarr[0].set_xlabel('Generations')
+    axarr[0].set_ylabel('Total Area of Species')
+    axarr[0].set_ylim([0, 1])
 
-genome_colors = {}
-for gid, genome in genomes.items():
-	r, g, b = genome.color
-	genome_colors[gid] = (float(r)/255, float(g)/255, float(b)/255)
+    axarr[1].stackplot(x, X_count, colors=colors)
+    axarr[1].set_title('Species Abundance')
+    axarr[1].set_xlabel('Generations')
+    axarr[1].set_ylabel('Abundance of Species')
 
-def n_most_common_genomes():
-	max_total_area = Counter()
-	for g in history[::step_size]:
-		for gid, count, area in g:
-			max_total_area[gid] = max(area*count, max_total_area.get(gid, 0))
-	top_genomes = list(zip(*max_total_area.most_common(n)))[0]
-	return top_genomes
+def histogram_animate(x, X_area, colors, out_dir, width, height):
+    dpi = 96
+    step = 20
+    f, axarr = plt.subplots(1, figsize=(width/dpi, height/dpi), dpi=dpi)
 
-# Get genomes we will plot seperately.
-top_genomes = n_most_common_genomes()
+    plt.subplots_adjust(left=.1, bottom=.1, right=.9, top=.9, wspace=.2, hspace=0)
 
-# Map these from genome_id to index.
-top_genome_ordering = dict(zip(top_genomes, range(len(top_genomes))))
+    axarr.stackplot(x, X_area, colors=colors)
 
-top_genome_colors = [genome_colors[gid] for gid in top_genomes]
-top_genome_colors.append((.3, .3, .3))
+    dir = pjoin(out_dir, 'hist_imgs')
 
-# Create array to store plotting.
-X_area = np.zeros((n+1, n_steps))
-X_count = np.zeros((n+1, n_steps))
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
+    os.makedirs(dir)
 
-for i in range(n_steps):
-	g = i * step_size
-	for genome_id, count, area in history[g]:
-		if genome_id in top_genome_ordering:
-			X_area[top_genome_ordering[genome_id], i] = area*count
-			X_count[top_genome_ordering[genome_id], i] = count
-		else:
-			X_area[-1, i] = area*count
-			X_count[-1, i] = count
+    axarr.set_ylim([0, 1])
+    axarr.set_xlim([0, x.max()])
+    axarr.get_xaxis().set_visible(False)
+    axarr.get_yaxis().set_visible(False)
 
-for i in range(n_steps):
-	X_area[:, i] /= X_area[:,i].sum()
+    line = axarr.axvline(x=0, color='black')
 
-print('Structured data for plotting.')
+    for _x in range(0, x.max(), step):
+        line.set_xdata(_x)
+        plt.savefig(pjoin(dir, '%06d.jpg'%_x))
 
-x = np.arange(n_steps) * step_size
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('archive_path', help='Path to archive')
+    parser.add_argument('--n_color', type=int, default=50, help='Number of genomes to color individually, default=50')
+    parser.add_argument('--n_steps', type=int, default=1000, help='Graphing resolution, default=100')
+    parser.add_argument('--animate', action='store_true', default=False)
+    parser.add_argument('--animate_width', type=int, default=1800, help='Graphing resolution, default=100')
+    parser.add_argument('--animate_height', type=int, default=300, help='Graphing resolution, default=100')
 
-f, axarr = plt.subplots(2, sharex=True, figsize=(12, 8))
-axarr[0].stackplot(x, X_area, colors=top_genome_colors)
-axarr[0].set_title('Species Total Area')
-axarr[0].set_xlabel('Generations')
-axarr[0].set_ylabel('Total Area of Species')
-axarr[0].set_ylim([0, 1])
+    # parser.add_argument('--n_steps', type=int, default=1000, help='Graphing resolution, default=100')
 
-axarr[1].stackplot(x, X_count, colors=top_genome_colors)
-axarr[1].set_title('Species Abundance')
-axarr[1].set_xlabel('Generations')
-axarr[1].set_ylabel('Abundance of Species')
+    args = parser.parse_args()
 
-# plt.show()
-outpath = os.path.join(os.path.dirname(filename), 'history.png')
-plt.savefig(outpath)
+    history, genomes = pickle.load(open(args.archive_path, 'rb'))
+    print('Loaded History.')
+
+    # Calculate generation skip size.
+    n_gens = len(history)
+    step_size = max(1, int(n_gens/args.n_steps))
+    print('step_size:', step_size)
+
+    # Get genomes we will plot seperately.
+    top_genomes = n_most_common_genomes(args.n_color)
+
+    # Map these from genome_id to index.
+    top_genome_ordering = dict(zip(top_genomes, range(len(top_genomes))))
+
+    colors = [format_color(genomes[gid].color) for gid in top_genomes ]
+    colors.append((.3, .3, .3))
+
+    # Create array to store plotting.
+    X_area = np.zeros((args.n_color+1, args.n_steps))
+    X_count = np.zeros((args.n_color+1, args.n_steps))
+
+    for i in range(args.n_steps):
+        g = i * step_size
+        for genome_id, count, area in history[g]:
+            if genome_id in top_genome_ordering:
+                X_area[top_genome_ordering[genome_id], i] = area*count
+                X_count[top_genome_ordering[genome_id], i] = count
+            else:
+                X_area[-1, i] = area*count
+                X_count[-1, i] = count
+
+    for i in range(args.n_steps):
+        X_area[:, i] /= X_area[:,i].sum()
+
+    x = np.arange(args.n_steps) * step_size
+    print('Structured data for plotting.')
+
+    plot(x, X_area, X_count, colors)
+
+    out_dir = os.path.dirname(args.archive_path)
+
+    outpath = os.path.join(out_dir, 'history.png')
+
+    plt.savefig(outpath)
+
+    if args.animate:
+        histogram_animate(x, X_area, colors, out_dir, args.animate_width, args.animate_height)
